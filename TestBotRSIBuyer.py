@@ -4,6 +4,7 @@ import re
 import time
 import json
 from datetime import datetime
+import matplotlib as plt
 
 api_key = 'z7Ltgm7gB1OBsvRiSPCuYOIq7CHMXEVT1ch4vnGuuxZ4I9kaKc7gwLbmd6n3HBJ2'
 api_secret = '3h3ylP3VtH6Rtvm83aoHrcI8erMjZfNeX6MAgRGnSHL1srkvu2WcJlUnH1fq59LX'
@@ -27,13 +28,15 @@ def get_precision(symbol):
     if x['symbol'] == symbol:
         return x['quantityPrecision']
 
-def buy(json):
+print(get_precision('BTCUSDT'))
+
+def buy(Json):
     try:
         
         now = datetime.now()
-        qty = partOfBalance / round(json['prices'][-1], get_precision(json['symbol']))
+        qty = partOfBalance / round(Json['prices'][-1], get_precision(Json['symbol']) - 1)
         order = client.create_order(
-            symbol=json['symbol'],
+            symbol=Json['symbol'],
             side=Client.SIDE_BUY,
             type=Client.ORDER_TYPE_MARKET,
             quantity=qty
@@ -73,7 +76,7 @@ def checkTicketsToSell(tickets, price, symbol):
                 ticket['sold'] = True
                 ticket['status'] = 'loss'
             
-jsons = []
+Jsons = []
 def makeCoinsJson(symbol):
     coinJson = {
         'symbol' : symbol,
@@ -88,12 +91,13 @@ def makeCoinsJson(symbol):
         'stoch' : [],
         'buySignal' : [False, False, False] 
     }
-    jsons.append(coinJson)
+    Jsons.append(coinJson)
 
-def appendPrices(coin):
-    coin = json['symbol']
+def appendPrices(Json):
+    coin = Json['symbol']
     price = float(tickers.loc[tickers['symbol'] == f'{coin}']['price'])
-    json['prices'].append(price)
+    Json['prices'].append(price)
+
 
 def Rsis(json):
     diff = json['prices'][-2] - json['prices'][-1]
@@ -107,10 +111,10 @@ def Rsis(json):
         RS = json['avg_gain'] / (json['avg_loss'] * -1)
         RSI = 100 - 100 / (1 + RS) 
         json['rsis'].append(RSI)
-    if json['rsis'][-1] < 25 or json['rsis'][-1] > 75:
-        json['buySignal'][0] = True
+    if len(json['rsis']) > 1:
+        if (json['rsis'][-1] < 25 and json['rsis'][-1] > 20):
+            json['buySignal'][0] = True
     
-
 def Mcds(json):
     long_EMA = sum(json['prices'][:-26:-1]) / len(json['prices'][:-26:-1])
     short_EMA = sum(json['prices'][:-12:-1]) / len(json['prices'][:-12:-1])
@@ -144,35 +148,45 @@ def checkIndicators(json):
     for i in json['buySignal']:
         if i == True:
             signalCounter += 1
-        if signalCounter >= 2:
+        if signalCounter >= 1:
             buy(json)
+            signalCounter = 0
+            json['buySignal'] = [False, False, False]
 
-def checkIndicators(json):
-    global signalCounter
-    if len(json['prices']) > 2:
-        Rsis(json)
-    if len(json['prices']) > 30:
-        Mcds(json)
-    if len(json['stoch']) > 15:
-        Stochastic(json)
-    for i in json['buySignal']:
-        if i == True:
-            signalCounter += 1
-        if signalCounter >= 2:
-            buy(json)
+def makePlotBalance():
+    now = datetime.now()
+    plt.plot(*range(10), balances)
+    plt.savefig('report.png')
 
-for i in range(100):
+def makeStatistic(tickets):
+    counterLoss = 0
+    counterGain = 0
+    for i in tickets:
+        if i['status'] == 'loss':
+            counterLoss += 1
+        elif i['status'] == 'gain':
+            counterGain += 1
+        statistic = counterGain / counterLoss * 100
+        print('Statistic - ', statistic)
+    
+for coin in whitelist:
+    makeCoinsJson(coin)
+
+
+for i in range(200):
+    print('Cycle number - ', i)
     tickers = client.get_all_tickers()
     tickers = pd.DataFrame(tickers)
-    for json in jsons:
-        appendPrices(json)
-        if len(json['prices']) > 15: 
-            checkIndicators(json)
-            checkTicketsToSell(tickets, json['prices'][-1], json['symbol'])
+    for Json in Jsons:
+        appendPrices(Json)
+        if len(Json['prices']) > 15: 
+            checkIndicators(Json)
+            checkTicketsToSell(tickets, Json['prices'][-1], Json['symbol'])
 
-    time.sleep(5)
+    time.sleep(20)
 
-coinInfo = pd.DataFrame(jsons)
+coinInfo = pd.DataFrame(Jsons)
 ticketsInfo = pd.DataFrame(tickets)
+makeStatistic(tickets)
 coinInfo
 tickets
