@@ -24,43 +24,50 @@ def get_precision(symbol):
    for x in info['symbols']:
     if x['symbol'] == symbol:
         return x['quantityPrecision']
-def Rsis(CoindInfo):
-    diff = CoindInfo['prices'][-2] - CoindInfo['prices'][-1]
+def Rsis(CoinInfo):
+    diff = CoinInfo['prices'][-2] - CoinInfo['prices'][-1]
+    EMAUp = sum(CoinInfo) / len(CoinInfo)
+    EMADown = sum(CoinInfo) / len(CoinInfo)
     if diff > 0:
-        CoindInfo['avg_gain'] += diff
-        RS = CoindInfo['avg_gain'] / (CoindInfo['avg_loss'] * -1)
+        CoinInfo['avg_gain'].append(diff)
+        EMAUp = sum(CoinInfo['avg_gain']) / len(CoinInfo['avg_gain'])
+        RS = CoinInfo['avg_gain'] / (CoinInfo['avg_loss'])
         RSI = 100 - 100 / (1 + RS)
-        CoindInfo['rsis'].append(RSI) 
+        CoinInfo['rsis'].append(RSI) 
     elif diff < 0:
-        CoindInfo['avg_loss'] += diff
-        RS = CoindInfo['avg_gain'] / (CoindInfo['avg_loss'] * -1)
+        CoinInfo['avg_loss'].append(diff)
+        EMADown = sum(CoinInfo['avg_loss']) / len(CoinInfo['avg_loss'])
+        if EMADown < 0:
+            EMADown = EMADown * -1
+        RS = EMAUp / EMADown
         RSI = 100 - 100 / (1 + RS) 
-        CoindInfo['rsis'].append(RSI)
-    if len(CoindInfo['rsis']) > 1:
-        if (CoindInfo['rsis'][-1] < 30 and CoindInfo['rsis'][-1] > 20):
-            CoindInfo['buySignal'][0] = True
+        CoinInfo['rsis'].append(RSI)
+    if len(CoinInfo['rsis']) > 1:
+        if (CoinInfo['rsis'][-1] < 30 and CoinInfo['rsis'][-1] > 20):
+            CoinInfo['buySignal'][0] = True
     
-def Mcds(CoindInfo):
-    long_EMA = sum(CoindInfo['prices'][:-26:-1]) / len(CoindInfo['prices'][:-26:-1])
-    short_EMA = sum(CoindInfo['prices'][:-12:-1]) / len(CoindInfo['prices'][:-12:-1])
-    short_diff_EMA = sum(CoindInfo['prices'][:-9:-1]) / len(CoindInfo['prices'][:-9:-1])
-    CoindInfo['long_EMA'].append(long_EMA)
-    CoindInfo['short_EMA'].append(short_EMA)
-    CoindInfo['short_diff_EMA'].append(short_diff_EMA)
-    MACD = round(CoindInfo['short_EMA'][-1] - CoindInfo['long_EMA'][-1], 3)
+def Mcds(CoinInfo):
+    long_EMA = sum(CoinInfo['prices'][:-26:-1]) / len(CoinInfo['prices'][:-26:-1])
+    short_EMA = sum(CoinInfo['prices'][:-12:-1]) / len(CoinInfo['prices'][:-12:-1])
+    short_diff_EMA = sum(CoinInfo['prices'][:-9:-1]) / len(CoinInfo['prices'][:-9:-1])
+    CoinInfo['long_EMA'].append(long_EMA)
+    CoinInfo['short_EMA'].append(short_EMA)
+    CoinInfo['short_diff_EMA'].append(short_diff_EMA)
+    MACD = round(CoinInfo['short_EMA'][-1] - CoinInfo['long_EMA'][-1], 3)
     signal = short_diff_EMA * (short_EMA - long_EMA)
-    CoindInfo['macds'].append(MACD)
-    if len(CoindInfo['macds']) > 10 and MACD - signal > -0.6 and MACD - signal < 0.6:
-        CoindInfo['buySignal'][1] = True
+    CoinInfo['macds'].append(MACD)
+    if len(CoinInfo['macds']) > 10 and MACD - signal > -0.6 and MACD - signal < 0.6:
+        CoinInfo['buySignal'][1] = True
         
-def Stochastic(CoindInfo):
-    priceLock = CoindInfo['prices'][-1]
-    minimum = min(CoindInfo['prices'][:15])
-    maximum = max(CoindInfo['prices'][:15])
+def Stochastic(CoinInfo):
+    priceLock = CoinInfo['prices'][-1]
+    minimum = min(CoinInfo['prices'][:15])
+    maximum = max(CoinInfo['prices'][:15])
     Stoch = (priceLock - minimum) / (maximum - minimum) * 100
-    CoindInfo['stoch'].append(Stoch)
-    if len(CoindInfo['stoch']) > 10 and Stoch < 20:
-        CoindInfo['buySignal'][2] = True
+    CoinInfo['stoch'].append(Stoch)
+    if len(CoinInfo['stoch']) > 10 and Stoch < 20:
+        CoinInfo['buySignal'][2] = True
+
 def buy(coinInfo):
     try:
         now = datetime.now()
@@ -92,6 +99,9 @@ def buy(coinInfo):
             tickets.append(Ticket)
     except Exception as E:
         print(E)
+        print(x)
+        print(precision)
+        print(coinInfo['symbol'])
 
 
 def sell(ticket):
@@ -118,8 +128,8 @@ def makeCoinsJson(symbol):
     coinInfo = {
         'symbol' : symbol,
         'prices' : [],
-        'avg_gain' : 1,
-        'avg_loss' : 1,
+        'avg_gain' : [],
+        'avg_loss' : [],
         'rsis' : [],
         'macds' : [],
         'long_EMA' : [],
@@ -174,17 +184,14 @@ def checkTicketsToSell(tickets, price, symbol):
                 ticket['status'] = 'loss'
 
 for i in range(1000):
-    try:
-        for coinInfo in coinInfos:
-            appendPrices(coinInfo)
-            # balance = float(client.get_asset_balance(asset='USDT')['free'])
-            if len(coinInfo['prices']) > 10:
-                checkIndicators(coinInfo)
-                checkTicketsToSell(tickets, coinInfo['prices'][-1], coinInfo['symbol'][-1])
-            time.sleep(5)
-        makeStatistic(tickets)
-    except Exception as E:
-        print(E)
+    for coinInfo in coinInfos:
+        appendPrices(coinInfo)
+        # balance = float(client.get_asset_balance(asset='USDT')['free'])
+        if len(coinInfo['prices']) > 10:
+            checkIndicators(coinInfo)
+            checkTicketsToSell(tickets, coinInfo['prices'][-1], coinInfo['symbol'][-1])
+        time.sleep(5)
+    makeStatistic(tickets)
 for ticket in tickets:
     sell(ticket)
 
